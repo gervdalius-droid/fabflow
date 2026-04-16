@@ -129,7 +129,10 @@ select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='ht
 .sg-task.done .sg-status{background:var(--green);border:1.5px solid var(--green)}
 .sg-status{width:10px;height:10px;border-radius:50%;flex-shrink:0;transition:all .2s}
 .sg-task-name{font-size:11px;font-weight:500;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;line-height:1.3}
-.sg-task-name.done-text{text-decoration:line-through;opacity:.5}
+.done-text{text-decoration:line-through;opacity:.5}
+.done-text.sg-task-name{text-decoration:line-through;opacity:.5}
+span.done-text{color:var(--green-t);opacity:1}
+span.in-progress-text{color:var(--blue-t)}
 .sg-task-mats{font-size:9px;color:var(--hint);font-family:var(--mono);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:1px}
 .sg-empty{font-size:11px;color:var(--hint);text-align:center;padding:14px 8px}
 .sg-add{width:100%;justify-content:center;margin-top:6px;font-size:10px;padding:4px}
@@ -483,6 +486,8 @@ select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='ht
 <div class="toast-container" id="toast-container"></div>
 
 <script>
+// Safari-safe HTML helper — avoids nested template literals
+const h=(cond,html,els='')=>cond?html:els;
 // Early declarations — auth code references these before CONSTANTS section
 let USERS = [];
 let DB = {
@@ -1109,13 +1114,18 @@ function renderFloor(){
       <div style="flex:1;min-width:0">
         <div style="font-size:12px;font-weight:700;color:${hasOverdue?'var(--red-t)':'var(--amber-t)'};margin-bottom:6px">${hasOverdue?'Vėluojantys darbai':'Artėjantys terminai'} (${urgentItems.length})</div>
         <div style="display:flex;flex-wrap:wrap;gap:6px">
-          ${urgentItems.map(i=>`<div onclick="${i.taskId?`openTaskModal('${i.taskId}')`:`showView('project','${i.pid}')`}" style="background:var(--surface);border:1px solid ${i.days<0?'var(--red-t)':i.days<2?'#fca5a5':'var(--amber-t)'};border-radius:7px;padding:5px 10px;cursor:pointer;transition:all .14s;display:flex;align-items:center;gap:7px" onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background='var(--surface)'">
-            <div style="width:7px;height:7px;border-radius:50%;background:${i.color};flex-shrink:0"></div>
-            <div>
-              <div style="font-size:11px;font-weight:600;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${i.label}</div>
-              <div style="font-size:9px;color:${i.days<0?'var(--red-t)':'var(--amber-t)'};font-family:var(--mono);font-weight:700">${i.days<0?'⚠ '+Math.abs(i.days)+'d. vėluoja':i.days===0?'⏰ Šiandien':i.days===1?'⚡ Rytoj':'📅 '+i.days+'d.'}</div>
-            </div>
-          </div>`).join('')}
+          ${urgentItems.map(i=>{
+            const onclick=i.taskId?'openTaskModal(\''+i.taskId+'\')':'showView(\'project\',\''+i.pid+'\')';
+            const borderColor=i.days<0?'var(--red-t)':i.days<2?'#fca5a5':'var(--amber-t)';
+            const dayLabel=i.days<0?'⚠ '+Math.abs(i.days)+'d. vėluoja':i.days===0?'⏰ Šiandien':i.days===1?'⚡ Rytoj':'📅 '+i.days+'d.';
+            const dayColor=i.days<0?'var(--red-t)':'var(--amber-t)';
+            return'<div onclick="'+onclick+'" style="background:var(--surface);border:1px solid '+borderColor+';border-radius:7px;padding:5px 10px;cursor:pointer;transition:all .14s;display:flex;align-items:center;gap:7px" onmouseover="this.style.background=\'var(--surface2)\'" onmouseout="this.style.background=\'var(--surface)\'">'
+              +'<div style="width:7px;height:7px;border-radius:50%;background:'+i.color+';flex-shrink:0"></div>'
+              +'<div>'
+              +'<div style="font-size:11px;font-weight:600;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+i.label+'</div>'
+              +'<div style="font-size:9px;color:'+dayColor+';font-family:var(--mono);font-weight:700">'+dayLabel+'</div>'
+              +'</div></div>';
+          }).join('')}
         </div>
       </div>
     </div>`;
@@ -1172,28 +1182,39 @@ function renderFloor(){
     const sched=p.deadline?calcProjectSchedule(p):null;
     const daysLeft=p.deadline?Math.round((new Date(p.deadline)-now)/86400000):null;
     const canFinish=sched&&daysLeft!==null?daysLeft>=sched._totalDays:null;
-    return`<div class="project-card" onclick="showView('project','${p.id}')" style="${overdueTasks?'border-color:var(--red-t);':''}${p.type==='paslauga'?'border-left:3px solid var(--amber-t);':''}">
-      <div style="display:flex;align-items:flex-start;gap:10px;margin-bottom:10px">
-        <div style="width:38px;height:38px;border-radius:9px;background:${p.color}20;color:${p.color};display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;flex-shrink:0">${p.type==='paslauga'?'⚡':initials(p.name)}</div>
-        <div style="flex:1;min-width:0">
-          <div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap;margin-bottom:1px">
-            <div style="font-size:12px;font-weight:600;line-height:1.3">${escHtml(p.name)}</div>
-            ${p.type==='paslauga'?'<span style="font-size:9px;font-weight:700;color:var(--amber-t);background:var(--amber-bg);padding:1px 5px;border-radius:4px">⚡ Paslauga</span>':''}
-            ${p.priority?prioHtml(p.priority):''}
-            ${overdueTasks?`<span style="font-size:9px;font-weight:700;color:var(--red-t);background:var(--red-bg);padding:1px 5px;border-radius:4px">⚠ ${overdueTasks} vėluoja</span>`:''}
-          </div>
-          <div style="font-size:10px;color:var(--muted)">${escHtml(p.client)}</div>
-          ${p.deadline?`<div style="margin-top:2px">${deadlineHtml(p.deadline)}</div>`:''}
-          ${p.type==='paslauga'&&p.serviceSteps?`<div style="font-size:9px;color:var(--hint);margin-top:2px;font-family:var(--mono)">${p.serviceSteps.map(id=>STEPS.find(s=>s.id===id)?.short||id).join(' → ')}</div>`:''}
-        </div>
-      </div>
-      <div class="pc-pipeline">${(p.serviceSteps?STEPS.filter(s=>p.serviceSteps.includes(s.id)):STEPS).map(s=>{const t=tasks.find(t2=>t2.stepId===s.id);const cls=t?(t.status==='done'?'done':t.status==='in-progress'?'active':''):'';return`<div class="pp-step ${cls}" title="${s.label}" style="${p.serviceSteps?'flex:unset;width:12px;':''}"  ></div>`}).join('')}</div>
-      <div style="height:3px;background:var(--surface3);border-radius:2px;overflow:hidden;margin:5px 0 9px"><div style="width:${pct}%;height:100%;background:${p.color};border-radius:2px"></div></div>
-      <div style="display:flex;align-items:center;justify-content:space-between;font-size:10px;color:var(--muted)">
-        ${p.status==='completed'?`<span style="font-size:10px;font-weight:700;background:var(--green-bg);color:var(--green-t);padding:2px 7px;border-radius:5px">✅ Baigtas</span>`:curStep?`<span class="badge badge-blue">🔄 ${curStep.label}</span>`:`<span class="badge badge-green">✅ Visi atlikti</span>`}
-        <span>${tasks.filter(t=>t.status==='done').length}/${tasks.length} · ${formatAge(p.created)}</span>
-      </div>
-    </div>`;
+    const cardStyle=(overdueTasks?'border-color:var(--red-t);':'')+(p.type==='paslauga'?'border-left:3px solid var(--amber-t);':'');
+    const iconContent=p.type==='paslauga'?'⚡':initials(p.name);
+    const paslaugaBadge=p.type==='paslauga'?'<span style="font-size:9px;font-weight:700;color:var(--amber-t);background:var(--amber-bg);padding:1px 5px;border-radius:4px">⚡ Paslauga</span>':'';
+    const overdueBadge=overdueTasks?'<span style="font-size:9px;font-weight:700;color:var(--red-t);background:var(--red-bg);padding:1px 5px;border-radius:4px">⚠ '+overdueTasks+' vėluoja</span>':'';
+    const deadlineLine=p.deadline?'<div style="margin-top:2px">'+deadlineHtml(p.deadline)+'</div>':'';
+    const routeLine=p.type==='paslauga'&&p.serviceSteps?'<div style="font-size:9px;color:var(--hint);margin-top:2px;font-family:var(--mono)">'+p.serviceSteps.map(id=>{const st=STEPS.find(s=>s.id===id);return st?st.short:id;}).join(' → ')+'</div>':'';
+    const stepsToShow=p.serviceSteps?STEPS.filter(s=>p.serviceSteps.includes(s.id)):STEPS;
+    const pipeline=stepsToShow.map(s=>{
+      const t=tasks.find(t2=>t2.stepId===s.id);
+      const cls=t?(t.status==='done'?'done':t.status==='in-progress'?'active':''):'';
+      return'<div class="pp-step '+cls+'" title="'+s.label+'"'+(p.serviceSteps?' style="flex:unset;width:12px"':'')+' ></div>';
+    }).join('');
+    const statusBadge=p.status==='completed'
+      ?'<span style="font-size:10px;font-weight:700;background:var(--green-bg);color:var(--green-t);padding:2px 7px;border-radius:5px">✅ Baigtas</span>'
+      :curStep?'<span class="badge badge-blue">🔄 '+curStep.label+'</span>'
+      :'<span class="badge badge-green">✅ Visi atlikti</span>';
+    return'<div class="project-card" onclick="showView(\'project\',\''+p.id+'\')" style="'+cardStyle+'">'
+      +'<div style="display:flex;align-items:flex-start;gap:10px;margin-bottom:10px">'
+      +'<div style="width:38px;height:38px;border-radius:9px;background:'+p.color+'20;color:'+p.color+';display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;flex-shrink:0">'+iconContent+'</div>'
+      +'<div style="flex:1;min-width:0">'
+      +'<div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap;margin-bottom:1px">'
+      +'<div style="font-size:12px;font-weight:600;line-height:1.3">'+escHtml(p.name)+'</div>'
+      +paslaugaBadge+prioHtml(p.priority||'mid')+overdueBadge
+      +'</div>'
+      +'<div style="font-size:10px;color:var(--muted)">'+escHtml(p.client)+'</div>'
+      +deadlineLine+routeLine
+      +'</div></div>'
+      +'<div class="pc-pipeline">'+pipeline+'</div>'
+      +'<div style="height:3px;background:var(--surface3);border-radius:2px;overflow:hidden;margin:5px 0 9px"><div style="width:'+pct+'%;height:100%;background:'+p.color+';border-radius:2px"></div></div>'
+      +'<div style="display:flex;align-items:center;justify-content:space-between;font-size:10px;color:var(--muted)">'
+      +statusBadge
+      +'<span>'+tasks.filter(t=>t.status==='done').length+'/'+tasks.length+' · '+formatAge(p.created)+'</span>'
+      +'</div></div>';
   }).join('');
 }
 
@@ -2434,45 +2455,51 @@ function taskCardHtml(t, pid, stepId){
   const now=Date.now();
   const hasDl=t.deadline&&t.status!=='done';
   const dlDays=hasDl?Math.round((new Date(t.deadline)-now)/86400000):999;
-  const dlBadge=hasDl?`<div style="font-size:9px;font-family:var(--mono);color:${dlDays<0?'var(--red-t)':dlDays<3?'var(--red-t)':dlDays<7?'var(--amber-t)':'var(--hint)'};font-weight:${dlDays<7?'600':'400'};margin-top:2px">${dlDays<0?'🔴 Vėluoja '+Math.abs(dlDays)+'d.':dlDays===0?'🟠 Šiandien':dlDays===1?'🟡 Rytoj':'📅 '+t.deadline}</div>`:'';
+  const dlColor=dlDays<0?'var(--red-t)':dlDays<3?'var(--red-t)':dlDays<7?'var(--amber-t)':'var(--hint)';
+  const dlWeight=dlDays<7?'600':'400';
+  const dlText=dlDays<0?'🔴 Vėluoja '+Math.abs(dlDays)+'d.':dlDays===0?'🟠 Šiandien':dlDays===1?'🟡 Rytoj':'📅 '+t.deadline;
+  const dlBadge=hasDl?'<div style="font-size:9px;font-family:var(--mono);color:'+dlColor+';font-weight:'+dlWeight+';margin-top:2px">'+dlText+'</div>':'';
   const isDone=t.status==='done';
   const isActive=t.status==='in-progress';
   const isBlocked=!!t.blocker;
   const borderLeft=isBlocked?'border-left:3px solid var(--red-t);':dlDays<0?'border-left:3px solid var(--red-t);':dlDays<3?'border-left:3px solid var(--amber-t);':'';
+  const cardStyle=borderLeft+(isDone?'opacity:0.6;':'')+(isBlocked?'background:var(--red-bg,#fef2f2);':'');
   const commentCount=DB.comments.filter(c=>c.taskId===t.id).length;
-  const blockerClick=isBlocked?`event.stopPropagation();toast(\\'🚫 Pirmiausia išspręskite blokatorių\\','error')`:`event.stopPropagation();advanceTask('${t.id}')`;
+  const blockerClick=isBlocked?'event.stopPropagation();toast(\'🚫 Pirmiausia išspręskite blokatorių\',\'error\')':'event.stopPropagation();advanceTask(\''+t.id+'\')';
+  const advBtnStyle='padding:1px 7px;font-size:11px;font-weight:700;'+(isBlocked?'opacity:0.4;cursor:not-allowed;':'')+(isActive?'background:var(--blue);color:#fff;border-color:var(--blue)':'');
   const advBtn=isDone
-    ? `<span style="font-size:10px;color:var(--green-t);font-weight:700;padding:1px 6px">✓</span>`
-    : `<button class="btn btn-xs" style="padding:1px 7px;font-size:11px;font-weight:700;${isBlocked?'opacity:0.4;cursor:not-allowed;':''}${isActive?'background:var(--blue);color:#fff;border-color:var(--blue)':''}" onclick="${blockerClick}" title="${isBlocked?'Užblokuota':isActive?'Baigti žingsnį':'Pradėti žingsnį'}">→</button>`;
-  return`<div class="sg-task ${t.status}"
-    draggable="${isDone?'false':'true'}"
-    ondragstart="dragTaskStart(event,'${t.id}')"
-    ondragend="dragTaskEnd(event)"
-    onclick="openTaskModal('${t.id}')"
-    style="${borderLeft}${isDone?'opacity:0.6;':''}${isBlocked?'background:var(--red-bg,#fef2f2);':''}">
-    <div class="sg-status"></div>
-    <div style="flex:1;min-width:0">
-      <div class="sg-task-name ${isDone?'done-text':''}">${escHtml(t.name)}</div>
-      ${isBlocked?`<div style="font-size:9px;color:var(--red-t);font-weight:600;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">🚫 ${escHtml(t.blocker)}</div>`:''}
-      ${(t.qtyOrdered||0)>0?`<div style="margin-top:4px">
-        <div style="display:flex;align-items:center;gap:4px;margin-bottom:2px">
-          <div style="flex:1;height:4px;background:var(--surface3);border-radius:2px;overflow:hidden">
-            <div style="width:${Math.min(100,Math.round((t.qtyDone||0)/(t.qtyOrdered)*100))}%;height:100%;background:${t.qtyDone>=t.qtyOrdered?'var(--green)':'var(--blue)'};border-radius:2px"></div>
-          </div>
-          <span style="font-size:9px;font-family:var(--mono);font-weight:600;color:${t.qtyDone>=(t.qtyOrdered||0)?'var(--green-t)':'var(--blue-t)'}${isDone?';opacity:0.6':''}">${t.qtyDone||0}/${t.qtyOrdered}</span>
-        </div>
-      </div>`:''}
-      ${t.materials.length?`<div class="sg-task-mats">${t.materials[0]}${t.materials.length>1?` +${t.materials.length-1}`:''}</div>`:''}
-      ${dlBadge}
-      ${commentCount?`<div style="font-size:9px;color:var(--blue-t);margin-top:2px">💬 ${commentCount} koment.</div>`:''}
-    </div>
-    <div style="display:flex;align-items:center;gap:4px;flex-shrink:0">
-      ${(t.assigneeIds&&t.assigneeIds.length>1
-        ? t.assigneeIds.slice(0,3).map(id=>ava(id,16)).join('')
-        : ava(t.assigneeId,18))}
-      ${advBtn}
-    </div>
-  </div>`;
+    ? '<span style="font-size:10px;color:var(--green-t);font-weight:700;padding:1px 6px">✓</span>'
+    : '<button class="btn btn-xs" style="'+advBtnStyle+'" onclick="'+blockerClick+'" title="'+(isBlocked?'Užblokuota':isActive?'Baigti žingsnį':'Pradėti žingsnį')+'">→</button>';
+
+  const avatars=t.assigneeIds&&t.assigneeIds.length>1
+    ? t.assigneeIds.slice(0,3).map(id=>ava(id,16)).join('')
+    : ava(t.assigneeId,18);
+
+  const blockerHtml=isBlocked?'<div style="font-size:9px;color:var(--red-t);font-weight:600;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">🚫 '+escHtml(t.blocker)+'</div>':'';
+
+  let qtyHtml='';
+  if((t.qtyOrdered||0)>0){
+    const pct=Math.min(100,Math.round((t.qtyDone||0)/t.qtyOrdered*100));
+    const barColor=t.qtyDone>=t.qtyOrdered?'var(--green)':'var(--blue)';
+    const qtyClass=(t.qtyDone>=(t.qtyOrdered||0)?'done':'in-progress')+'-text';
+    qtyHtml='<div style="margin-top:4px"><div style="display:flex;align-items:center;gap:4px;margin-bottom:2px">'
+      +'<div style="flex:1;height:4px;background:var(--surface3);border-radius:2px;overflow:hidden">'
+      +'<div style="width:'+pct+'%;height:100%;background:'+barColor+';border-radius:2px"></div></div>'
+      +'<span style="font-size:9px;font-family:var(--mono);font-weight:600" class="'+qtyClass+'">'+(t.qtyDone||0)+'/'+t.qtyOrdered+'</span>'
+      +'</div></div>';
+  }
+
+  const matsHtml=t.materials.length?'<div class="sg-task-mats">'+t.materials[0]+(t.materials.length>1?' +'+(t.materials.length-1):'')+'</div>':'';
+  const commentHtml=commentCount?'<div style="font-size:9px;color:var(--blue-t);margin-top:2px">💬 '+commentCount+' koment.</div>':'';
+
+  return'<div class="sg-task '+t.status+'" draggable="'+(isDone?'false':'true')+'" ondragstart="dragTaskStart(event,\''+t.id+'\')" ondragend="dragTaskEnd(event)" onclick="openTaskModal(\''+t.id+'\')" style="'+cardStyle+'">'
+    +'<div class="sg-status"></div>'
+    +'<div style="flex:1;min-width:0">'
+    +'<div class="sg-task-name'+(isDone?' done-text':'')+'">'+escHtml(t.name)+'</div>'
+    +blockerHtml+qtyHtml+matsHtml+dlBadge+commentHtml
+    +'</div>'
+    +'<div style="display:flex;align-items:center;gap:4px;flex-shrink:0">'+avatars+advBtn+'</div>'
+    +'</div>';
 }
 
 // Update a single project card on the floor without full re-render
@@ -3464,7 +3491,7 @@ function showImportPreview(data){
       <div><div style="font-weight:600;font-size:12px">${data.projectName||'Importuotas'}</div>
       <div style="font-size:10px;color:var(--muted)">${data.parts.length} detalių · ${data.stocks.length} plokščių · ${data.edgebands.length} briaunų</div></div>
     </div>
-    ${data.stocks.length?`<div style="margin-bottom:10px"><div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--hint);margin-bottom:5px">🪵 Plokštės</div>${data.stocks.map(s=>`<div style="display:flex;justify-content:space-between;font-size:11px;padding:3px 0;border-bottom:1px solid var(--border)"><span>${s.material} (${s.thickness}mm)</span><span style="font-family:var(--mono)">${s.m2} m²</span></div>`).join('')}</div>`:''}
+    ${data.stocks.length?'<div style="margin-bottom:10px"><div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--hint);margin-bottom:5px">🪵 Plokštės</div>'+data.stocks.map(s=>'<div style="display:flex;justify-content:space-between;font-size:11px;padding:3px 0;border-bottom:1px solid var(--border)"><span>'+s.material+' ('+s.thickness+'mm)</span><span style="font-family:var(--mono)">'+s.m2+' m²</span></div>').join('')+'</div>':''}
     <div class="form-field" style="margin-top:12px"><label class="form-label">Pridėti prie projekto</label>
       <select id="imp-proj-sel"><option value="new">➕ Sukurti naują: "${data.projectName||'Importuotas'}"</option>${pOpts}</select>
     </div>
