@@ -2335,6 +2335,13 @@ function setStepDay(stepId,val){
   DB.stepDays[stepId]=val;
   save();toast(`✓ ${getStep(stepId).label}: ${val}d.d.`);
 }
+// Get list of assignee IDs for a step (supports multi-assignee defaults)
+function getStepAssignees(stepId, fallback){
+  const def=DB.stepDefaults[stepId];
+  if(Array.isArray(def)&&def.length)return def;
+  if(typeof def==='string'&&def)return[def];
+  return fallback?[fallback]:[];
+}
 function advanceTask(tid){
   const t=DB.tasks.find(x=>x.id===tid);if(!t)return;
   const now=new Date().toISOString();
@@ -2362,64 +2369,31 @@ function advanceTask(tid){
   }
 
   if(t.status==='in-progress'){
-    // Mark current step done
     t.status='done';
     t.completedAt=now;
     t.timeLog.push({event:'completed',at:now,by:DB.currentUserId});
     const dur=t.startedAt?Math.round((new Date(now)-new Date(t.startedAt))/3600000):0;
+    toast(`✅ Atlikta!${dur?' ('+dur+'val.)':''}`,'success');
 
-    // Find next step — for Paslauga only go through selected steps
-    const si=STEPS.findIndex(s=>s.id===stepId);
+    // All tasks are pre-created — just notify about next step
     const proj=getProject(pid);
-    const allowedSteps=proj?.serviceSteps
-      ? STEPS.filter(s=>proj.serviceSteps.includes(s.id))
-      : STEPS;
-    const curIdxInAllowed=allowedSteps.findIndex(s=>s.id===stepId);
-    let nextStep=allowedSteps[curIdxInAllowed+1]||null;
-    // Skip Apdaila only for full projects
-    if(!proj?.serviceSteps&&nextStep?.id==='apdaila'&&proj&&!needsApdaila(proj)){
-      nextStep=allowedSteps[curIdxInAllowed+2]||null;
-    }
-    if(nextStep){
-      const existing=DB.tasks.find(tx=>tx.projectId===pid&&tx.stepId===nextStep.id&&tx.status!=='done');
-      if(existing){
-        toast(`✅ Atlikta! ${nextStep.icon} ${nextStep.label} jau laukia`,'success');
-      } else {
-        const defAssignee=DB.stepDefaults[nextStep.id]||t.assigneeId;
-        const projName=proj?.name||'';
-        DB.tasks.push({
-          id:uid(),projectId:pid,
-          stepId:nextStep.id,
-          name:`${nextStep.label} – ${projName}`,
-          status:'pending',
-          assigneeId:defAssignee,
-          materials:[...t.materials],
-          deadline:'',
-          created:now,
-        });
-        toast(`✅ Atlikta! ➡ ${nextStep.icon} ${nextStep.label}`,'success');
-        addNotif('step-move',`${nextStep.icon} ${nextStep.label} laukia`,projName,pid);
-      }
-      save();
-      if(DB.currentProjectId===pid&&_projTab==='kanban'){
-        patchKanbanColumn(pid, stepId);
-        patchKanbanColumn(pid, nextStep.id);
-        patchStepProgressBar(pid);
-        renderSidebar();
-      } else {
-        if(DB.currentProjectId===pid)renderProjectView(pid,_projTab);
-      }
+    const allowedSteps=proj?.serviceSteps?STEPS.filter(s=>proj.serviceSteps.includes(s.id)):STEPS;
+    const curIdx=allowedSteps.findIndex(s=>s.id===stepId);
+    let nextStep=allowedSteps[curIdx+1]||null;
+    if(!proj?.serviceSteps&&nextStep?.id==='apdaila'&&!needsApdaila(proj))nextStep=allowedSteps[curIdx+2]||null;
+    if(nextStep) addNotif('step-move',`${nextStep.icon} ${nextStep.label} laukia`,proj?.name||'',pid);
+
+    // Check if all steps done
+    const allDone=projTasks(pid).every(t2=>t2.status==='done');
+    if(allDone)toast('🎉 Visi žingsniai atlikti!','success');
+
+    save();
+    if(DB.currentProjectId===pid&&_projTab==='kanban'){
+      patchKanbanColumn(pid, stepId);
+      patchStepProgressBar(pid);
+      renderSidebar();
     } else {
-      // Last step done — project complete!
-      toast(`🎉 Visi žingsniai atlikti! Projektas baigtas`,'success');
-      save();
-      if(DB.currentProjectId===pid&&_projTab==='kanban'){
-        patchKanbanColumn(pid, stepId);
-        patchStepProgressBar(pid);
-        renderSidebar();
-      } else {
-        if(DB.currentProjectId===pid)renderProjectView(pid,_projTab);
-      }
+      if(DB.currentProjectId===pid)renderProjectView(pid,_projTab);
     }
     updateFloorCard(pid);
   }
@@ -2623,25 +2597,27 @@ function createProject(fromOrderId){
   };
 
   if(type==='paslauga'){
-    // Only create tasks for selected steps
     const selectedSteps=STEPS.filter(s=>document.getElementById('ns-step-'+s.id)?.checked);
     if(!selectedSteps.length){toast('Pasirinkite bent vieną žingsnį','error');return;}
     p.serviceSteps=selectedSteps.map(s=>s.id);
     const shortName=name.split('—')[0].trim();
-    selectedSteps.forEach((s,i)=>{
-      const defAss=DB.stepDefaults[s.id]||p.owner;
+    selectedSteps.forEach(s=>{
+      const defIds=getStepAssignees(s.id,p.owner);
       DB.tasks.push({id:uid(),projectId:p.id,stepId:s.id,
         name:`${s.label} – ${shortName}`,
-        status:'pending',assigneeId:defAss,materials:[],
-        created:new Date().toISOString()});
+        status:'pending',assigneeId:defIds[0]||p.owner,assigneeIds:defIds,
+        materials:[],created:new Date().toISOString()});
     });
   } else {
-    // Full project — create first step task only (rest auto-created on advance)
-    const firstAssignee=DB.stepDefaults['pjovimas']||p.owner;
-    DB.tasks.push({id:uid(),projectId:p.id,stepId:'pjovimas',
-      name:`Pjovimas – ${name.split('—')[0].trim()}`,
-      status:'pending',assigneeId:firstAssignee,materials:[],
-      created:new Date().toISOString()});
+    // Create ALL 8 step tasks immediately — all visible from start
+    const shortName=name.split('—')[0].trim();
+    STEPS.forEach(s=>{
+      const defIds=getStepAssignees(s.id,p.owner);
+      DB.tasks.push({id:uid(),projectId:p.id,stepId:s.id,
+        name:`${s.label} – ${shortName}`,
+        status:'pending',assigneeId:defIds[0]||p.owner,assigneeIds:defIds,
+        materials:[],created:new Date().toISOString()});
+    });
   }
 
   DB.projects.push(p);
@@ -3038,17 +3014,24 @@ function renderTeam(){
     <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--rl);overflow:hidden;box-shadow:var(--sh);margin-top:20px">
       <div style="padding:12px 16px;border-bottom:1px solid var(--border)">
         <div style="font-size:13px;font-weight:600">Numatytieji atsakingi asmenys</div>
-        <div style="font-size:11px;color:var(--muted);margin-top:2px">Automatiškai priskiriami kuriant naujas užduotis</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:2px">Spausti narį kad priskirti/atšaukti. Galima keletas vienam žingsniui.</div>
       </div>
       <div style="padding:12px 16px">
         ${STEPS.map(s=>{
-          const defId=DB.stepDefaults[s.id]||'';
-          const userOpts='<option value="">— Nepriskirtas —</option>'+USERS.map(u=>`<option value="${u.id}" ${u.id===defId?'selected':''}>${escHtml(u.name)}</option>`).join('');
+          const defIds=Array.isArray(DB.stepDefaults[s.id])?DB.stepDefaults[s.id]:(DB.stepDefaults[s.id]?[DB.stepDefaults[s.id]]:[]);
+          const userBtns=USERS.map(u=>{
+            const sel=defIds.includes(u.id);
+            return`<div onclick="${isManager()?`toggleStepDefault('${s.id}','${u.id}')`:''}" style="display:flex;align-items:center;gap:5px;padding:3px 7px;border-radius:6px;border:1.5px solid ${sel?u.color:'var(--border)'};background:${sel?u.bg:'transparent'};cursor:${isManager()?'pointer':'default'};font-size:11px;transition:all .12s">
+              ${ava(u.id,16)}<span style="font-weight:${sel?'600':'400'}">${escHtml(u.name)}</span>
+            </div>`;
+          }).join('');
+          const assigned=defIds.map(id=>getUser(id).name).filter(Boolean).join(', ')||'—';
           return`<div class="step-def-row">
             <div class="step-def-icon" style="background:${s.bg};color:${s.color}">${s.icon}</div>
             <div style="flex:1;font-size:12px;font-weight:500;color:${s.color}">${s.label}</div>
-            ${isManager()?`<select style="width:160px;font-size:11px;padding:5px 8px" onchange="setStepDefault('${s.id}',this.value)">${userOpts}</select>`
-            :`<span style="font-size:11px;color:var(--muted)">${defId?getUser(defId).name:'—'}</span>`}
+            ${isManager()
+              ? `<div style="display:flex;flex-wrap:wrap;gap:4px;max-width:400px">${userBtns}</div>`
+              : `<span style="font-size:11px;color:var(--muted)">${assigned}</span>`}
           </div>`;
         }).join('')}
       </div>
@@ -3063,7 +3046,20 @@ function renderTeam(){
   </div>`+membersHtml+stepDefaultsHtml;
 }
 
-function setStepDefault(stepId,userId){DB.stepDefaults[stepId]=userId;save();toast(`✓ ${getStep(stepId).label} → ${userId?getUser(userId).name:'nenustatyta'}`);}
+function toggleStepDefault(stepId,userId){
+  let cur=DB.stepDefaults[stepId];
+  if(!Array.isArray(cur))cur=cur?[cur]:[];
+  const idx=cur.indexOf(userId);
+  if(idx>=0)cur.splice(idx,1);else cur.push(userId);
+  DB.stepDefaults[stepId]=cur;
+  save();
+  renderTeam();
+  const names=cur.map(id=>getUser(id).name).join(', ');
+  toast(`✓ ${getStep(stepId).label}: ${names||'nenustatyta'}`);
+}
+function setStepDefault(stepId,userId){
+  DB.stepDefaults[stepId]=userId?[userId]:[];save();
+}
 
 function openEditMemberModal(uid2){
   const u=getUser(uid2);if(!u||!u.id||u.id==='?')return;
