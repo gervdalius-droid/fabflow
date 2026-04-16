@@ -1231,6 +1231,7 @@ function renderProjectView(pid,tab){
         <span>📋 ${tasks.length} užd.</span>
         ${p.importData?'<span class="badge badge-purple">📊 Excel</span>':''}
         ${p.files?.length?`<span class="badge badge-gray">📎 ${p.files.length}</span>`:''}
+        ${p.lines?.length?`<span class="badge badge-blue" style="cursor:pointer" onclick="toggleProjectLines('${p.id}')">📋 ${p.lines.length} poz.</span>`:''}
       </div>
       ${p.notes?`<div style="font-size:11px;color:var(--hint);margin-top:4px;font-style:italic">${escHtml(p.notes)}</div>`:''}
       ${p.status==='archived'?`<div style="margin-top:5px"><span class="archive-badge">📦 Archyvuotas ${p.completedAt?new Date(p.completedAt).toLocaleDateString('lt-LT'):''}</span>${p.completionNote?` <span style="font-size:11px;color:var(--hint);font-style:italic">— ${escHtml(p.completionNote)}</span>`:''}</div>`:''}
@@ -2453,6 +2454,14 @@ function taskCardHtml(t, pid, stepId){
     <div style="flex:1;min-width:0">
       <div class="sg-task-name ${isDone?'done-text':''}">${escHtml(t.name)}</div>
       ${isBlocked?`<div style="font-size:9px;color:var(--red-t);font-weight:600;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">🚫 ${escHtml(t.blocker)}</div>`:''}
+      ${(t.qtyOrdered||0)>0?`<div style="margin-top:4px">
+        <div style="display:flex;align-items:center;gap:4px;margin-bottom:2px">
+          <div style="flex:1;height:4px;background:var(--surface3);border-radius:2px;overflow:hidden">
+            <div style="width:${Math.min(100,Math.round((t.qtyDone||0)/(t.qtyOrdered)*100))}%;height:100%;background:${t.qtyDone>=t.qtyOrdered?'var(--green)':'var(--blue)'};border-radius:2px"></div>
+          </div>
+          <span style="font-size:9px;font-family:var(--mono);font-weight:600;color:${t.qtyDone>=(t.qtyOrdered||0)?'var(--green-t)':'var(--blue-t)'}${isDone?';opacity:0.6':''}">${t.qtyDone||0}/${t.qtyOrdered}</span>
+        </div>
+      </div>`:''}
       ${t.materials.length?`<div class="sg-task-mats">${t.materials[0]}${t.materials.length>1?` +${t.materials.length-1}`:''}</div>`:''}
       ${dlBadge}
       ${commentCount?`<div style="font-size:9px;color:var(--blue-t);margin-top:2px">💬 ${commentCount} koment.</div>`:''}
@@ -2539,6 +2548,40 @@ function openNewProjectModal(fromOrder){
       <input type="checkbox" id="ns-step-${s.id}" style="width:14px;height:14px" onchange="toggleServiceStep()" ${i===0?'checked':''}>
       <span style="background:${s.bg};color:${s.color};padding:2px 6px;border-radius:4px">${s.icon} ${s.label}</span>
     </label>`).join('');
+  // Show order lines if converting from order
+  const lines=fo.lines||[];
+  const linesPreview=lines.length?`
+    <div class="form-field">
+      <label class="form-label">Pozicijos iš užsakymo</label>
+      <div style="border:1px solid var(--border);border-radius:7px;overflow:hidden;margin-bottom:4px">
+        <table style="width:100%;border-collapse:collapse;font-size:10px">
+          <thead><tr style="background:var(--surface2)"><th style="padding:4px 8px;text-align:left;color:var(--muted)">Artikulas</th><th style="padding:4px 8px;text-align:left;color:var(--muted)">Aprašymas</th><th style="padding:4px 8px;text-align:right;color:var(--muted)">Kiekis</th><th style="padding:4px 8px;text-align:right;color:var(--muted)">Prist.</th></tr></thead>
+          <tbody>${lines.map(l=>`<tr style="border-top:1px solid var(--border)">
+            <td style="padding:4px 8px;font-family:var(--mono);color:var(--blue-t);font-weight:600">${escHtml(l.art||'')}</td>
+            <td style="padding:4px 8px">${escHtml(l.desc||'')}</td>
+            <td style="padding:4px 8px;text-align:right;font-weight:600">${escHtml(l.qty||'')}</td>
+            <td style="padding:4px 8px;text-align:right;color:var(--hint)">${l.date||''}</td>
+          </tr>`).join('')}</tbody>
+        </table>
+      </div>
+    </div>`:
+    `<div class="form-field">
+      <label class="form-label">Pozicijos (neprivaloma)</label>
+      <div style="border:1px solid var(--border);border-radius:8px;overflow:hidden">
+        <div style="display:grid;grid-template-columns:1fr 1fr 90px 110px 28px;gap:0;background:var(--surface2);padding:4px 8px;font-size:9px;font-weight:700;color:var(--muted);text-transform:uppercase">
+          <span>Artikulas</span><span>Aprašymas</span><span>Kiekis</span><span>Prist. data</span><span></span>
+        </div>
+        <div id="np-lines"><div id="np-line-0" style="display:grid;grid-template-columns:1fr 1fr 90px 110px 28px;border-top:1px solid var(--border)">
+          <input id="npl-art-0" placeholder="Artikulas" style="border:none;border-right:1px solid var(--border);border-radius:0;font-size:10px;font-family:var(--mono);padding:5px 8px">
+          <input id="npl-desc-0" placeholder="Aprašymas" style="border:none;border-right:1px solid var(--border);border-radius:0;font-size:10px;padding:5px 8px">
+          <input id="npl-qty-0" placeholder="kiekis" style="border:none;border-right:1px solid var(--border);border-radius:0;font-size:10px;padding:5px 8px;text-align:right">
+          <input id="npl-date-0" type="date" style="border:none;border-right:1px solid var(--border);border-radius:0;font-size:10px;padding:5px 4px">
+          <button onclick="removeNpLine(0)" style="border:none;background:none;color:var(--red-t);cursor:pointer;font-size:14px">×</button>
+        </div></div>
+      </div>
+      <button class="btn btn-sm" style="margin-top:5px" onclick="addNpLine()">+ Pridėti eilutę</button>
+    </div>`;
+
   openModal(`<div class="modal-title">Naujas projektas <button class="modal-close" onclick="closeModal()">✕</button></div>
     <div style="display:flex;gap:8px;margin-bottom:14px">
       <button id="npt-projektas" class="btn btn-primary" style="flex:1;justify-content:center" onclick="switchProjType('projektas')">🏗 Projektas</button>
@@ -2556,6 +2599,7 @@ function openNewProjectModal(fromOrder){
       <div class="form-field"><label class="form-label">Terminas</label><input type="date" id="np-deadline" value="${fo.deadline||''}"></div>
       <div class="form-field"><label class="form-label">Atsakingas</label><select id="np-owner">${userOpts}</select></div>
     </div>
+    ${linesPreview}
     <div id="np-steps-section" style="display:none;margin-bottom:12px">
       <label class="form-label" style="margin-bottom:6px">Žingsniai (pasirinkite tik reikalingus)</label>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:5px">${stepChecks}</div>
@@ -2563,8 +2607,51 @@ function openNewProjectModal(fromOrder){
     </div>
     <div class="form-field"><label class="form-label">Pastabos</label><textarea id="np-notes" style="min-height:44px">${escHtml(fo.notes||'')}</textarea></div>
     <div class="form-field"><label class="form-label">Spalva</label><div class="color-picker">${PROJ_COLORS.map((c,i)=>`<div class="color-swatch ${c===_selColor?'selected':''}" style="background:${c}" onclick="selCol('${c}')" id="sw${i}"></div>`).join('')}</div></div>
-    <div class="form-actions"><button class="btn" onclick="closeModal()">Atšaukti</button><button class="btn btn-primary" onclick="createProject('${fo.id||''}')">Sukurti</button></div>`);
+    <div class="form-actions"><button class="btn" onclick="closeModal()">Atšaukti</button><button class="btn btn-primary" onclick="createProject('${fo.id||''}','${encodeURIComponent(JSON.stringify(lines))}')">Sukurti</button></div>`);
 }
+
+function toggleProjectLines(pid){
+  const el=document.getElementById('proj-lines-'+pid);
+  if(!el){
+    // Build and insert lines table
+    const p=getProject(pid);if(!p?.lines?.length)return;
+    const header=document.querySelector(`#project-content .project-header`)||document.getElementById('project-content')?.firstElementChild;
+    if(!header)return;
+    const div=document.createElement('div');
+    div.id='proj-lines-'+pid;
+    div.style.cssText='margin:8px 0;border:1px solid var(--border);border-radius:8px;overflow:hidden;font-size:10px';
+    div.innerHTML=`<table style="width:100%;border-collapse:collapse">
+      <thead><tr style="background:var(--surface2)">
+        <th style="padding:5px 10px;text-align:left;color:var(--muted);font-weight:600">Eil.</th>
+        <th style="padding:5px 10px;text-align:left;color:var(--muted);font-weight:600">Artikulas / Aprašymas</th>
+        <th style="padding:5px 10px;text-align:right;color:var(--muted);font-weight:600">Kiekis</th>
+        <th style="padding:5px 10px;text-align:right;color:var(--muted);font-weight:600;white-space:nowrap">Prist. data</th>
+      </tr></thead>
+      <tbody>${p.lines.map((l,i)=>`<tr style="border-top:1px solid var(--border)">
+        <td style="padding:4px 10px;color:var(--hint)">${i+1}</td>
+        <td style="padding:4px 10px"><div style="font-weight:700;font-family:var(--mono);color:var(--blue-t)">${escHtml(l.art||'')}</div><div style="color:var(--text)">${escHtml(l.desc||'')}</div></td>
+        <td style="padding:4px 10px;text-align:right;font-weight:700;font-family:var(--mono)">${l.qty||''}</td>
+        <td style="padding:4px 10px;text-align:right;color:var(--hint);white-space:nowrap">${l.date||''}</td>
+      </tr>`).join('')}</tbody>
+    </table>`;
+    // Insert after the badges line
+    const badges=header.querySelector('[style*="badge"]')?.closest('div')||header.lastElementChild;
+    header.insertBefore(div,badges?.nextSibling||null);
+  } else {
+    el.remove();
+  }
+}
+  const el=document.getElementById('np-lines');if(!el)return;
+  const i=el.children.length;
+  el.insertAdjacentHTML('beforeend',`<div id="np-line-${i}" style="display:grid;grid-template-columns:1fr 1fr 90px 110px 28px;border-top:1px solid var(--border)">
+    <input id="npl-art-${i}" placeholder="Artikulas" style="border:none;border-right:1px solid var(--border);border-radius:0;font-size:10px;font-family:var(--mono);padding:5px 8px">
+    <input id="npl-desc-${i}" placeholder="Aprašymas" style="border:none;border-right:1px solid var(--border);border-radius:0;font-size:10px;padding:5px 8px">
+    <input id="npl-qty-${i}" placeholder="kiekis" style="border:none;border-right:1px solid var(--border);border-radius:0;font-size:10px;padding:5px 8px;text-align:right">
+    <input id="npl-date-${i}" type="date" style="border:none;border-right:1px solid var(--border);border-radius:0;font-size:10px;padding:5px 4px">
+    <button onclick="removeNpLine(${i})" style="border:none;background:none;color:var(--red-t);cursor:pointer;font-size:14px">×</button>
+  </div>`);
+}
+function removeNpLine(i){const el=document.getElementById('np-line-'+i);if(el)el.remove();}
 
 function switchProjType(type){
   document.getElementById('np-type').value=type;
@@ -2585,6 +2672,23 @@ function selCol(c){_selColor=c;PROJ_COLORS.forEach((col,i)=>{const el=document.g
 function createProject(fromOrderId){
   const name=document.getElementById('np-name').value.trim();if(!name)return;
   const type=document.getElementById('np-type')?.value||'projektas';
+
+  // Collect lines from modal (if manually entered)
+  let lines=[];
+  const lineRows=document.querySelectorAll('#np-lines > div');
+  lineRows.forEach((r,i)=>{
+    const art=(document.getElementById('npl-art-'+i)?.value||'').trim();
+    const desc=(document.getElementById('npl-desc-'+i)?.value||'').trim();
+    const qty=(document.getElementById('npl-qty-'+i)?.value||'').trim();
+    const date=(document.getElementById('npl-date-'+i)?.value||'');
+    if(art||desc)lines.push({art,desc,qty,date,qtyDone:0});
+  });
+  // If converting from order and lines already shown as preview, use order lines
+  if(!lines.length&&fromOrderId){
+    const o=(DB.orders||[]).find(x=>x.id===fromOrderId);
+    if(o?.lines)lines=o.lines.map(l=>({...l,qtyDone:0}));
+  }
+
   const p={
     id:uid(),name,type,
     client:document.getElementById('np-client').value.trim()||'—',
@@ -2593,8 +2697,12 @@ function createProject(fromOrderId){
     deadline:document.getElementById('np-deadline')?.value||'',
     owner:document.getElementById('np-owner')?.value||USERS[0]?.id||'',
     notes:document.getElementById('np-notes')?.value.trim()||'',
+    lines, // save order lines/positions to project
     created:new Date().toISOString(),
   };
+
+  // Calculate total ordered qty for task tracking
+  const totalQty=lines.reduce((s,l)=>s+(parseInt(l.qty)||0),0)||0;
 
   if(type==='paslauga'){
     const selectedSteps=STEPS.filter(s=>document.getElementById('ns-step-'+s.id)?.checked);
@@ -2606,16 +2714,17 @@ function createProject(fromOrderId){
       DB.tasks.push({id:uid(),projectId:p.id,stepId:s.id,
         name:`${s.label} – ${shortName}`,
         status:'pending',assigneeId:defIds[0]||p.owner,assigneeIds:defIds,
+        qtyOrdered:totalQty,qtyDone:0,
         materials:[],created:new Date().toISOString()});
     });
   } else {
-    // Create ALL 8 step tasks immediately — all visible from start
     const shortName=name.split('—')[0].trim();
     STEPS.forEach(s=>{
       const defIds=getStepAssignees(s.id,p.owner);
       DB.tasks.push({id:uid(),projectId:p.id,stepId:s.id,
         name:`${s.label} – ${shortName}`,
         status:'pending',assigneeId:defIds[0]||p.owner,assigneeIds:defIds,
+        qtyOrdered:totalQty,qtyDone:0,
         materials:[],created:new Date().toISOString()});
     });
   }
@@ -2676,6 +2785,31 @@ function openTaskModal(tid){
       <span style="font-size:16px">🚫</span>
       <div style="flex:1"><div style="font-size:11px;font-weight:700;color:var(--red-t)">BLOKAS</div><div style="font-size:12px;color:var(--red-t)">${escHtml(t.blocker)}</div></div>
       <button class="btn btn-sm" onclick="clearBlocker('${t.id}')" style="color:var(--red-t);border-color:var(--red-t)">Išspręsta ✓</button>
+    </div>`:''}
+    ${(t.qtyOrdered||0)>0?`<div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px 14px;margin-bottom:12px">
+      <div style="font-size:11px;font-weight:600;color:var(--muted);margin-bottom:8px">KIEKIO SEKIMAS</div>
+      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+        <div style="text-align:center">
+          <div style="font-size:22px;font-weight:800;color:var(--text)">${t.qtyOrdered||0}</div>
+          <div style="font-size:10px;color:var(--hint)">Užsakyta</div>
+        </div>
+        <div style="flex:1;height:10px;background:var(--surface3);border-radius:5px;overflow:hidden;min-width:80px">
+          <div style="width:${Math.min(100,Math.round((t.qtyDone||0)/(t.qtyOrdered||1)*100))}%;height:100%;background:var(--green);border-radius:5px;transition:width .3s"></div>
+        </div>
+        <div style="text-align:center">
+          <div style="font-size:22px;font-weight:800;color:var(--green-t)">${t.qtyDone||0}</div>
+          <div style="font-size:10px;color:var(--hint)">Atlikta</div>
+        </div>
+        <div style="text-align:center">
+          <div style="font-size:22px;font-weight:800;color:var(--amber-t)">${(t.qtyOrdered||0)-(t.qtyDone||0)}</div>
+          <div style="font-size:10px;color:var(--hint)">Liko</div>
+        </div>
+        <div style="display:flex;gap:4px;align-items:center">
+          <button class="btn btn-sm" onclick="addQtyDone('${t.id}',-1)" style="font-size:14px;font-weight:700;padding:2px 10px">−</button>
+          <input id="qty-done-${t.id}" type="number" min="0" max="${t.qtyOrdered||9999}" value="${t.qtyDone||0}" style="width:60px;text-align:center;font-size:13px;font-weight:700" onchange="setQtyDone('${t.id}',+this.value)">
+          <button class="btn btn-sm btn-primary" onclick="addQtyDone('${t.id}',1)" style="font-size:14px;font-weight:700;padding:2px 10px">+</button>
+        </div>
+      </div>
     </div>`:''}
     <div class="form-grid-2" style="margin-bottom:12px">
       <div class="form-field"><label class="form-label">Statusas</label><select onchange="updateTask('${t.id}','status',this.value)">${sto}</select></div>
@@ -2772,7 +2906,19 @@ function clearBlocker(tid){
   openTaskModal(tid);
   toast('✅ Blokas išspręstas!','success');
 }
-function addMat(id){const i=document.getElementById('nm-'+id)||document.getElementById('nm');if(!i?.value.trim())return;const t=DB.tasks.find(x=>x.id===id);if(t){t.materials.push(i.value.trim());save();openTaskModal(id)}}
+function addQtyDone(tid,delta){
+  const t=DB.tasks.find(x=>x.id===tid);if(!t)return;
+  t.qtyDone=Math.max(0,Math.min(t.qtyOrdered||9999,(t.qtyDone||0)+delta));
+  const inp=document.getElementById('qty-done-'+tid);if(inp)inp.value=t.qtyDone;
+  save();
+  if(DB.currentProjectId===t.projectId&&_projTab==='kanban')patchKanbanColumn(t.projectId,t.stepId);
+}
+function setQtyDone(tid,val){
+  const t=DB.tasks.find(x=>x.id===tid);if(!t)return;
+  t.qtyDone=Math.max(0,Math.min(t.qtyOrdered||9999,val||0));
+  save();
+  if(DB.currentProjectId===t.projectId&&_projTab==='kanban')patchKanbanColumn(t.projectId,t.stepId);
+}const i=document.getElementById('nm-'+id)||document.getElementById('nm');if(!i?.value.trim())return;const t=DB.tasks.find(x=>x.id===id);if(t){t.materials.push(i.value.trim());save();openTaskModal(id)}}
 function rmMatIdx(id,idx){const t=DB.tasks.find(x=>x.id===id);if(t){t.materials.splice(idx,1);save();openTaskModal(id)}}
 function rmMat(id,m){const t=DB.tasks.find(x=>x.id===id);if(t){t.materials=t.materials.filter(x=>x!==m);save();}}
 function addComment(tid){const i=document.getElementById('ci-'+tid);const text=i?.value.trim();if(!text)return;const t=DB.tasks.find(x=>x.id===tid);DB.comments.push({id:uid(),taskId:tid,userId:DB.currentUserId,text,created:new Date().toISOString()});addNotif('comment',`${curUser().name} paliko komentarą`,t?.name||'',t?.projectId||'');save();openTaskModal(tid)}
@@ -2913,52 +3059,127 @@ function renderOrders(){
     ${converted.length?`<div class="section-header" style="margin-top:16px"><div class="section-title" style="color:var(--muted)">✅ Paversti projektais (${converted.length})</div></div>
     ${converted.map(o=>orderCardHtml(o,true)).join('')}`:''}`;
 }
+
 function orderCardHtml(o,done=false){
+  const lines=o.lines||[];
+  const linesHtml=lines.length?`
+    <div style="margin-top:8px;border:1px solid var(--border);border-radius:7px;overflow:hidden">
+      <table style="width:100%;border-collapse:collapse;font-size:10px">
+        <thead><tr style="background:var(--surface2)">
+          <th style="padding:4px 8px;text-align:left;color:var(--muted);font-weight:600;white-space:nowrap">Eil.</th>
+          <th style="padding:4px 8px;text-align:left;color:var(--muted);font-weight:600">Artikulas / Aprašymas</th>
+          <th style="padding:4px 8px;text-align:right;color:var(--muted);font-weight:600">Kiekis</th>
+          <th style="padding:4px 8px;text-align:right;color:var(--muted);font-weight:600;white-space:nowrap">Prist. data</th>
+        </tr></thead>
+        <tbody>${lines.map((l,i)=>`<tr style="border-top:1px solid var(--border)">
+          <td style="padding:4px 8px;color:var(--hint)">${i+1}</td>
+          <td style="padding:4px 8px"><div style="font-weight:600;font-family:var(--mono);font-size:9px;color:var(--blue-t)">${escHtml(l.art||'')}</div><div>${escHtml(l.desc||'')}</div></td>
+          <td style="padding:4px 8px;text-align:right;font-weight:600;font-family:var(--mono)">${l.qty||''}</td>
+          <td style="padding:4px 8px;text-align:right;color:var(--hint);white-space:nowrap">${l.date||''}</td>
+        </tr>`).join('')}</tbody>
+      </table>
+    </div>`:'';
   return`<div class="order-card" style="${done?'opacity:.55':''}">
     <div style="flex:1;min-width:0">
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:5px;flex-wrap:wrap">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;flex-wrap:wrap">
         <div style="font-size:13px;font-weight:600">${escHtml(o.name)}</div>
         ${prioHtml(o.priority)}
         ${done?'<span class="badge badge-green">✓ Projektas sukurtas</span>':''}
       </div>
-      <div style="font-size:11px;color:var(--muted);margin-bottom:4px">👤 ${escHtml(o.client||'—')} · pridėta ${formatAge(o.created)}</div>
-      ${deadlineHtml(o.deadline)}
-      ${o.notes?`<div style="font-size:11px;color:var(--hint);margin-top:4px;font-style:italic">${escHtml(o.notes)}</div>`:''}
+      <div style="font-size:11px;color:var(--muted);margin-bottom:3px">👤 ${escHtml(o.client||'—')} · ${formatAge(o.created)}</div>
+      ${o.deadline?deadlineHtml(o.deadline):''}
+      ${o.notes?`<div style="font-size:11px;color:var(--hint);margin-top:3px;font-style:italic">${escHtml(o.notes)}</div>`:''}
+      ${linesHtml}
     </div>
-    <div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end;flex-shrink:0">
+    <div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end;flex-shrink:0;margin-left:12px">
       ${!done?`<button class="btn btn-sm btn-primary" onclick="convertOrder('${o.id}')">▶ Sukurti projektą</button>`:''}
       ${!done?`<button class="btn btn-sm" onclick="openOrderModal('${o.id}')">✏ Redaguoti</button>`:''}
       <button class="btn btn-sm btn-danger" onclick="deleteOrder('${o.id}')">🗑</button>
     </div>
   </div>`;
 }
+
 function openOrderModal(editId){
   const o=editId?(DB.orders||[]).find(x=>x.id===editId):null;
   const isEdit=!!o;
   const prioOpts=[['mid','🟡 Vidutinis'],['high','🔴 Aukštas'],['low','🟢 Žemas']].map(([v,l])=>`<option value="${v}" ${(o?.priority||'mid')===v?'selected':''}>${l}</option>`).join('');
+  const lines=o?.lines||[{art:'',desc:'',qty:'',date:''}];
+  const linesHtml=lines.map((l,i)=>orderLineRow(i,l)).join('');
   openModal(`<div class="modal-title">${isEdit?'Redaguoti užsakymą':'Naujas užsakymas'} <button class="modal-close" onclick="closeModal()">✕</button></div>
-    <div class="form-field"><label class="form-label">Pavadinimas *</label><input id="ord-name" value="${escHtml(o?.name||'')}" autofocus placeholder="pvz. Virtuvė Petrauskai"></div>
-    <div class="form-grid-2">
+    <div class="form-grid-2" style="margin-bottom:10px">
+      <div class="form-field"><label class="form-label">Projekto pavadinimas *</label><input id="ord-name" value="${escHtml(o?.name||'')}" autofocus placeholder="pvz. Virtuvė Petrauskai"></div>
       <div class="form-field"><label class="form-label">Klientas</label><input id="ord-client" value="${escHtml(o?.client||'')}" placeholder="UAB Klientas"></div>
+    </div>
+    <div class="form-grid-2" style="margin-bottom:10px">
       <div class="form-field"><label class="form-label">Prioritetas</label><select id="ord-prio">${prioOpts}</select></div>
+      <div class="form-field"><label class="form-label">Terminas</label><input type="date" id="ord-deadline" value="${o?.deadline||''}"></div>
     </div>
-    <div class="form-grid-2">
-      <div class="form-field"><label class="form-label">Pageidaujamas terminas</label><input type="date" id="ord-deadline" value="${o?.deadline||''}"></div>
-      <div class="form-field"><label class="form-label">Vertė (€)</label><input type="number" id="ord-value" value="${o?.value||''}" placeholder="0"></div>
+    <div class="form-field" style="margin-bottom:6px">
+      <label class="form-label">Pozicijos (eilutės)</label>
+      <div style="border:1px solid var(--border);border-radius:8px;overflow:hidden">
+        <div style="display:grid;grid-template-columns:28px 1fr 1fr 90px 110px 32px;gap:0;background:var(--surface2);padding:5px 8px;font-size:9px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.04em">
+          <span>#</span><span>Artikulas</span><span>Aprašymas</span><span>Kiekis</span><span>Prist. data</span><span></span>
+        </div>
+        <div id="ord-lines">${linesHtml}</div>
+      </div>
+      <button class="btn btn-sm" style="margin-top:6px" onclick="addOrderLine()">+ Pridėti eilutę</button>
     </div>
-    <div class="form-field"><label class="form-label">Pastabos / Aprašymas</label><textarea id="ord-notes" placeholder="Užsakymo detalės...">${escHtml(o?.notes||'')}</textarea></div>
+    <div class="form-field"><label class="form-label">Pastabos</label><textarea id="ord-notes" style="min-height:44px" placeholder="Papildomos pastabos...">${escHtml(o?.notes||'')}</textarea></div>
     <div class="form-actions"><button class="btn" onclick="closeModal()">Atšaukti</button><button class="btn btn-primary" onclick="saveOrder('${editId||''}')">Išsaugoti</button></div>`);
 }
+
+function orderLineRow(i,l){
+  return`<div id="ord-line-${i}" style="display:grid;grid-template-columns:28px 1fr 1fr 90px 110px 32px;gap:0;border-top:1px solid var(--border);align-items:center">
+    <span style="padding:0 8px;font-size:10px;color:var(--hint)">${i+1}</span>
+    <input id="ol-art-${i}" value="${escHtml(l.art||'')}" placeholder="004-08-0003" style="border:none;border-right:1px solid var(--border);border-radius:0;font-size:10px;font-family:var(--mono);padding:6px 8px">
+    <input id="ol-desc-${i}" value="${escHtml(l.desc||'')}" placeholder="MEDINIS TASAS 24X48X550" style="border:none;border-right:1px solid var(--border);border-radius:0;font-size:11px;padding:6px 8px">
+    <input id="ol-qty-${i}" value="${escHtml(String(l.qty||''))}" placeholder="700 vnt" style="border:none;border-right:1px solid var(--border);border-radius:0;font-size:11px;padding:6px 8px;text-align:right">
+    <input id="ol-date-${i}" type="date" value="${l.date||''}" style="border:none;border-right:1px solid var(--border);border-radius:0;font-size:10px;padding:6px 4px">
+    <button onclick="removeOrderLine(${i})" style="border:none;background:none;color:var(--red-t);cursor:pointer;font-size:14px;padding:0 8px">×</button>
+  </div>`;
+}
+
+let _ordLineCount=1;
+function addOrderLine(){
+  const el=document.getElementById('ord-lines');if(!el)return;
+  const i=el.children.length;
+  el.insertAdjacentHTML('beforeend',orderLineRow(i,{art:'',desc:'',qty:'',date:''}));
+}
+function removeOrderLine(i){
+  const el=document.getElementById('ord-line-'+i);if(el)el.remove();
+  // Renumber remaining rows
+  const rows=document.querySelectorAll('#ord-lines > div');
+  rows.forEach((r,idx)=>{r.id='ord-line-'+idx;const n=r.querySelector('span');if(n)n.textContent=idx+1;});
+}
+
 function saveOrder(editId){
   const name=document.getElementById('ord-name').value.trim();if(!name)return;
-  const data={name,client:document.getElementById('ord-client').value.trim(),priority:document.getElementById('ord-prio').value,deadline:document.getElementById('ord-deadline').value,value:document.getElementById('ord-value').value,notes:document.getElementById('ord-notes').value.trim()};
+  // Collect lines
+  const lines=[];
+  const rows=document.querySelectorAll('#ord-lines > div');
+  rows.forEach((r,i)=>{
+    const art=(document.getElementById('ol-art-'+i)?.value||'').trim();
+    const desc=(document.getElementById('ol-desc-'+i)?.value||'').trim();
+    const qty=(document.getElementById('ol-qty-'+i)?.value||'').trim();
+    const date=(document.getElementById('ol-date-'+i)?.value||'');
+    if(art||desc)lines.push({art,desc,qty,date});
+  });
+  const data={
+    name,
+    client:document.getElementById('ord-client').value.trim(),
+    priority:document.getElementById('ord-prio').value,
+    deadline:document.getElementById('ord-deadline').value,
+    notes:document.getElementById('ord-notes').value.trim(),
+    lines,
+  };
   if(editId){const o=(DB.orders||[]).find(x=>x.id===editId);if(o)Object.assign(o,data);}
   else{if(!DB.orders)DB.orders=[];DB.orders.unshift({id:uid(),...data,status:'pending',created:new Date().toISOString()});}
   closeModal();save();renderOrders();renderSidebar();toast('✅ Išsaugota!','success');
 }
+
 function convertOrder(oid){
   const o=(DB.orders||[]).find(x=>x.id===oid);if(!o)return;
-  openNewProjectModal(o);  // pass order data to pre-fill new project form
+  openNewProjectModal(o);
 }
 function deleteOrder(oid){if(!confirm('Ištrinti užsakymą?'))return;DB.orders=(DB.orders||[]).filter(x=>x.id!==oid);save();renderOrders();renderSidebar();}
 
