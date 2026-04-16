@@ -2668,6 +2668,7 @@ function toggleProjectLines(pid){
     el.remove();
   }
 }
+function addNpLine(){
   const el=document.getElementById('np-lines');if(!el)return;
   const i=el.children.length;
   el.insertAdjacentHTML('beforeend',`<div id="np-line-${i}" style="display:grid;grid-template-columns:1fr 1fr 90px 110px 28px;border-top:1px solid var(--border)">
